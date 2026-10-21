@@ -6,6 +6,7 @@ Controller (ARC) runners. It extends GitHub's official ARC runner image with:
 - Rustup 1.29.0, installed without a default Rust toolchain so each repository's
   `rust-toolchain.toml` remains authoritative.
 - `build-essential` and `pkg-config` for crates with native build dependencies.
+- `git-lfs`, so `actions/checkout` with `lfs: true` works on the runner itself.
 - Docker CLI 29.7.2, Buildx 0.36.1, and Compose 5.5.0 for use with an external
   Docker daemon such as ARC's disposable Docker-in-Docker sidecar.
 

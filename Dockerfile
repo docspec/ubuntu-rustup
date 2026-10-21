@@ -25,6 +25,7 @@ ENV CARGO_HOME=/home/runner/.cargo \
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         build-essential \
+        git-lfs \
         pkg-config \
     && rm -rf /var/lib/apt/lists/* \
     && install --directory --owner=runner --group=docker \

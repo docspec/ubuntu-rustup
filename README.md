@@ -25,8 +25,14 @@ included; a Docker daemon must be supplied separately when workflows need one.
 docker pull ghcr.io/docspec/ubuntu-rustup:24.04
 ```
 
-Release tags are immutable. `24.04` and `latest` are moving aliases for the
-newest published Ubuntu 24.04 release. Deployments should pin the multi-platform
+Release tags are immutable. Besides manually pushed `v*` tags, a weekly
+scheduled run cuts the next `v24.04-YYYYMMDD.N` tag and publishes it without
+build cache, so the baked stable toolchain follows upstream stable. GitHub
+disables scheduled workflows in a public repository after 60 days without
+activity; re-enable it in the Actions tab if that happens. Stable is the one
+download not pinned by version: tracking it is the point of the weekly
+release. `24.04` and `latest` are moving aliases for the newest published
+Ubuntu 24.04 release. Deployments should pin the multi-platform
 digest of a release tag.
 
 ## Platforms

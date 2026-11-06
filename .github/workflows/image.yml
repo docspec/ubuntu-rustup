@@ -13,6 +13,11 @@ on:
       - .dockerignore
       - Dockerfile
       - .github/workflows/image.yml
+  # Weekly release so the baked stable toolchain tracks upstream stable;
+  # a stale one makes `rustup toolchain install stable` download again.
+  schedule:
+    # Friday: Rust stable releases land on Thursdays.
+    - cron: "23 4 * * 5"
 
 permissions:
   contents: read
@@ -20,9 +25,32 @@ permissions:
 
 env:
   IMAGE_NAME: ghcr.io/${{ github.repository }}
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'schedule' }}
 
 jobs:
+  release:
+    # Tags created with GITHUB_TOKEN trigger no workflow, so the build job
+    # below publishes this release itself.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - name: Create release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prefix="v24.04-$(date -u +%Y%m%d)."
+          n=$(( $(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${prefix}" --jq length) + 1 ))
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${prefix}${n}" -f "sha=${GITHUB_SHA}" >/dev/null
+          echo "version=${prefix#v}${n}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: release
+    if: ${{ !failure() && !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -31,7 +59,7 @@ jobs:
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
       - name: Log in to GHCR
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.PUBLISH == 'true'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
@@ -45,19 +73,22 @@ jobs:
           tags: |
             type=sha
             type=match,pattern=v(.*),group=1
-            type=raw,value=24.04,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
+            type=raw,value=${{ needs.release.outputs.version }},enable=${{ needs.release.outputs.version != '' }}
+            type=raw,value=24.04,enable=${{ env.PUBLISH }}
+            type=raw,value=latest,enable=${{ env.PUBLISH }}
       - name: Build and publish
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          push: ${{ env.PUBLISH }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ steps.meta.outputs.version }}
+            VERSION=${{ needs.release.outputs.version || steps.meta.outputs.version }}
             REVISION=${{ github.sha }}
+          # The scheduled rebuild must not reuse the cached toolchain layer.
+          no-cache: ${{ github.event_name == 'schedule' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           sbom: true

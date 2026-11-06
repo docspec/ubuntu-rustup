@@ -5,10 +5,11 @@ Controller (ARC) runners. It extends GitHub's official ARC runner image with:
 
 - Rustup 1.29.0 with the stable toolchain (`minimal` profile plus `clippy` and
   `rustfmt`) preinstalled as the default, so `rustup toolchain install stable`
-  finds it and downloads nothing. A repository's `rust-toolchain.toml` still
-  wins; other toolchains install at job time as usual. `RUSTUP_HOME` is
-  `/opt/rustup`, outside `/home/runner`, because ARC's Kubernetes container hook
-  copies `/home/runner` into every job Pod. `CARGO_HOME` stays
+  finds it and downloads no components until upstream stable moves past the
+  baked one (it still fetches the small channel manifest). A repository's
+  `rust-toolchain.toml` still wins; other toolchains install at job time as
+  usual. `RUSTUP_HOME` is `/opt/rustup`, outside `/home/runner`, because ARC's
+  Kubernetes container hook copies `/home/runner` into every job Pod. `CARGO_HOME` stays
   `/home/runner/.cargo`.
 - GitHub CLI (`gh`) 2.103.3.
 - `build-essential` and `pkg-config` for crates with native build dependencies.

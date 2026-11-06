@@ -29,23 +29,22 @@ env:
 
 jobs:
   release:
-    # Tags created with GITHUB_TOKEN trigger no workflow, so the build job
-    # below publishes this release itself.
+    # Picks the next free tag name; the tag job creates it once the image is
+    # published, so a failed build leaves no tag and a rerun reuses the name.
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     outputs:
-      version: ${{ steps.tag.outputs.version }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Create release tag
-        id: tag
+      - name: Pick release version
+        id: version
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           prefix="v24.04-$(date -u +%Y%m%d)."
           n=$(( $(gh api "repos/${GITHUB_REPOSITORY}/git/matching-refs/tags/${prefix}" --jq length) + 1 ))
-          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/${prefix}${n}" -f "sha=${GITHUB_SHA}" >/dev/null
           echo "version=${prefix#v}${n}" >> "$GITHUB_OUTPUT"
 
   build:
@@ -93,3 +92,17 @@ jobs:
           cache-to: type=gha,mode=max
           sbom: true
           provenance: mode=max
+
+  tag:
+    # Tags created with GITHUB_TOKEN trigger no workflow, so the build job
+    # above already published this release.
+    needs: [release, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f "ref=refs/tags/v${VERSION}" -f "sha=${GITHUB_SHA}" >/dev/null

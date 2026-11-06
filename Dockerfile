@@ -7,18 +7,21 @@ FROM ghcr.io/actions/actions-runner:2.338.2@sha256:759a1d94a15b05941aba5196974ff
 ARG TARGETARCH
 ARG COMPOSE_VERSION=5.5.0
 ARG RUSTUP_VERSION=1.29.0
+ARG GH_VERSION=2.103.3
 ARG VERSION=development
 ARG REVISION=unknown
 
 LABEL org.opencontainers.image.source="https://github.com/docspec/ubuntu-rustup" \
-      org.opencontainers.image.description="Ubuntu 24.04 GitHub Actions runner with Rustup and Docker tooling" \
+      org.opencontainers.image.description="Ubuntu 24.04 GitHub Actions runner with Rustup, stable Rust, GitHub CLI and Docker tooling" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}"
 
 USER root
 
+# Toolchains live in RUSTUP_HOME, outside /home/runner: ARC's container hook
+# copies /home/runner into every job Pod, so it must stay small.
 ENV CARGO_HOME=/home/runner/.cargo \
-    RUSTUP_HOME=/home/runner/.rustup \
+    RUSTUP_HOME=/opt/rustup \
     PATH=/home/runner/.cargo/bin:${PATH}
 
 # Rust crates commonly require a native linker and pkg-config at build time.
@@ -30,7 +33,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && install --directory --owner=runner --group=docker \
         /home/runner/.cargo \
-        /home/runner/.rustup \
+        /opt/rustup \
     && rm -f \
         /usr/bin/containerd \
         /usr/bin/containerd-shim-runc-v2 \
@@ -51,7 +54,8 @@ RUN apt-get update \
     && echo "${rustup_sha256}  /tmp/rustup-init" | sha256sum --check --strict \
     && chmod 0755 /tmp/rustup-init \
     && runuser --user runner -- \
-        /tmp/rustup-init -y --no-modify-path --profile minimal --default-toolchain none \
+        /tmp/rustup-init -y --no-modify-path --profile minimal \
+        --default-toolchain stable --component clippy,rustfmt \
     && rm /tmp/rustup-init \
     && case "$TARGETARCH" in \
         amd64) compose_arch=x86_64; compose_sha256=c57ab918abd5b05ca7e7d0f275875dd1330a695074f309dc9eab1b49efafcd4b ;; \
@@ -63,7 +67,19 @@ RUN apt-get update \
         "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${compose_arch}" \
     && echo "${compose_sha256}  /tmp/docker-compose" | sha256sum --check --strict \
     && install --mode=0755 /tmp/docker-compose /usr/local/lib/docker/cli-plugins/docker-compose \
-    && rm /tmp/docker-compose
+    && rm /tmp/docker-compose \
+    && case "$TARGETARCH" in \
+        amd64) gh_sha256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d ;; \
+        arm64) gh_sha256=ee32df2323c8847f5fac6cb6b4b69ca75828e9329a8f22f677021f7b3306ce63 ;; \
+        *) echo "unsupported architecture: $TARGETARCH" >&2; exit 1 ;; \
+       esac \
+    && curl --fail --location --show-error \
+        --output /tmp/gh.tar.gz \
+        "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${TARGETARCH}.tar.gz" \
+    && echo "${gh_sha256}  /tmp/gh.tar.gz" | sha256sum --check --strict \
+    && tar --extract --gzip --file=/tmp/gh.tar.gz --directory=/tmp \
+    && install --mode=0755 "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH}/bin/gh" /usr/local/bin/gh \
+    && rm -r /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION}_linux_${TARGETARCH}"
 
 COPY --from=docker-cli \
     /usr/local/bin/docker \

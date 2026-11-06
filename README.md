@@ -3,8 +3,14 @@
 A public Ubuntu 24.04 container image for ephemeral GitHub Actions Runner
 Controller (ARC) runners. It extends GitHub's official ARC runner image with:
 
-- Rustup 1.29.0, installed without a default Rust toolchain so each repository's
-  `rust-toolchain.toml` remains authoritative.
+- Rustup 1.29.0 with the stable toolchain (`minimal` profile plus `clippy` and
+  `rustfmt`) preinstalled as the default, so `rustup toolchain install stable`
+  finds it and downloads nothing. A repository's `rust-toolchain.toml` still
+  wins; other toolchains install at job time as usual. `RUSTUP_HOME` is
+  `/opt/rustup`, outside `/home/runner`, because ARC's Kubernetes container hook
+  copies `/home/runner` into every job Pod. `CARGO_HOME` stays
+  `/home/runner/.cargo`.
+- GitHub CLI (`gh`) 2.103.3.
 - `build-essential` and `pkg-config` for crates with native build dependencies.
 - `git-lfs`, so `actions/checkout` with `lfs: true` works on the runner itself.
 - Docker CLI 29.7.2, Buildx 0.36.1, and Compose 5.5.0 for use with an external
